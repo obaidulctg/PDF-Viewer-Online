@@ -3,138 +3,198 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Advanced PDF Viewer</title>
+  <title>PDF Viewer with Dark Mode</title>
   <style>
+    :root {
+      --bg-color: #f4f6f8;
+      --text-color: #333;
+      --card-bg: #fff;
+      --border-color: #ccc;
+      --accent-color: #3498db;
+      --btn-text: #fff;
+    }
+
+    body.dark {
+      --bg-color: #121212;
+      --text-color: #e0e0e0;
+      --card-bg: #1e1e1e;
+      --border-color: #444;
+      --accent-color: #1e90ff;
+      --btn-text: #fff;
+    }
+
     body {
-      font-family: Arial, sans-serif;
-      background: #f4f4f4;
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
       padding: 20px;
+      background: var(--bg-color);
+      color: var(--text-color);
+      transition: background 0.3s, color 0.3s;
     }
 
     h2 {
-      margin-bottom: 10px;
+      text-align: center;
+      margin-bottom: 20px;
     }
 
-    input[type="file"] {
-      margin-bottom: 15px;
+    .viewer-container {
+      max-width: 1000px;
+      margin: auto;
+      background: var(--card-bg);
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      padding: 20px;
+      transition: background 0.3s;
     }
 
-    #navigation {
+    .controls {
       display: flex;
       flex-wrap: wrap;
-      align-items: center;
       gap: 10px;
-      margin-bottom: 15px;
+      justify-content: center;
+      margin-bottom: 20px;
     }
 
-    button, input[type="number"] {
-      padding: 8px 12px;
+    .controls input[type="file"],
+    .controls input[type="number"],
+    .controls button {
+      padding: 10px;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
       font-size: 14px;
-      border-radius: 4px;
-      border: 1px solid #ccc;
+      background: var(--card-bg);
+      color: var(--text-color);
+      transition: background 0.3s, color 0.3s;
     }
 
-    button {
-      background: #007bff;
-      color: white;
+    .controls button {
+      background-color: var(--accent-color);
+      color: var(--btn-text);
       border: none;
       cursor: pointer;
     }
 
-    button:disabled {
-      background: #ccc;
+    .controls button:hover:not(:disabled) {
+      opacity: 0.9;
+    }
+
+    .controls button:disabled {
+      background: #999;
       cursor: not-allowed;
+    }
+
+    #page-info {
+      font-weight: bold;
+      padding: 8px;
     }
 
     #pdf-container {
       display: flex;
       flex-direction: column;
       gap: 20px;
+      overflow-y: auto;
     }
 
     canvas {
-      border: 1px solid #ccc;
+      margin: auto;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
       background: white;
-      margin: 0 auto;
     }
 
-    #page-jump {
-      display: flex;
-      align-items: center;
-      gap: 5px;
+    .theme-toggle {
+      margin-left: auto;
+      padding: 10px 15px;
+      font-size: 13px;
+      background: var(--accent-color);
+      color: var(--btn-text);
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+
+    @media (max-width: 600px) {
+      .controls {
+        flex-direction: column;
+        align-items: stretch;
+      }
     }
   </style>
 </head>
 <body>
-  <h2>Advanced PDF Viewer</h2>
+  <div class="viewer-container">
+    <h2>📄 PDF Viewer</h2>
 
-  <input type="file" id="upload" accept="application/pdf" />
+    <div class="controls">
+      <input type="file" id="upload" accept="application/pdf" />
+      <button id="prev">◀ Prev</button>
+      <button id="next">Next ▶</button>
+      <span id="page-info">Page 0 / 0</span>
 
-  <div id="navigation" style="display: none;">
-    <button id="prev">Previous</button>
-    <button id="next">Next</button>
-    <span id="page-info">Page 0 / 0</span>
-
-    <div id="page-jump">
-      <label for="page-num">Go to page:</label>
-      <input type="number" id="page-num" min="1" />
+      <input type="number" id="page-num" min="1" placeholder="Go to page" />
       <button id="jump">Jump</button>
+
+      <button id="zoom-in">🔍 Zoom In</button>
+      <button id="zoom-out">🔎 Zoom Out</button>
+      <button class="theme-toggle" id="toggle-theme">🌙 Dark Mode</button>
     </div>
+
+    <div id="pdf-container"></div>
   </div>
 
-  <div id="pdf-container"></div>
-
-  <!-- PDF.js -->
   <script src="https://unpkg.com/pdfjs-dist@^3.2.146/build/pdf.min.js"></script>
   <script>
     pdfjsLib.GlobalWorkerOptions.workerSrc = "https://unpkg.com/pdfjs-dist@^3.2.146/build/pdf.worker.min.js";
 
     const upload = document.getElementById('upload');
     const container = document.getElementById('pdf-container');
-    const nav = document.getElementById('navigation');
-    const pageInfo = document.getElementById('page-info');
     const prevBtn = document.getElementById('prev');
     const nextBtn = document.getElementById('next');
+    const pageInfo = document.getElementById('page-info');
     const pageNumInput = document.getElementById('page-num');
     const jumpBtn = document.getElementById('jump');
+    const zoomInBtn = document.getElementById('zoom-in');
+    const zoomOutBtn = document.getElementById('zoom-out');
+    const toggleTheme = document.getElementById('toggle-theme');
 
     let pdfDoc = null;
     let totalPages = 0;
     let currentPage = 1;
-    let pageCanvases = [];
+    let scale = 1.2;
+    const pageCanvases = [];
 
-    function renderAllPages(pdf) {
-      container.innerHTML = ''; // Clear previous
-      pageCanvases = [];
+    // Theme toggle with persistence
+    const setTheme = (mode) => {
+      document.body.classList.toggle('dark', mode === 'dark');
+      toggleTheme.textContent = mode === 'dark' ? '☀ Light Mode' : '🌙 Dark Mode';
+      localStorage.setItem('theme', mode);
+    };
 
-      for (let i = 1; i <= pdf.numPages; i++) {
-        pdf.getPage(i).then((page) => {
-          const viewport = page.getViewport({ scale: 1.2 });
+    toggleTheme.addEventListener('click', () => {
+      const isDark = document.body.classList.contains('dark');
+      setTheme(isDark ? 'light' : 'dark');
+    });
+
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    setTheme(savedTheme);
+
+    function renderAllPages() {
+      container.innerHTML = '';
+      pageCanvases.length = 0;
+
+      for (let i = 1; i <= totalPages; i++) {
+        pdfDoc.getPage(i).then(page => {
+          const viewport = page.getViewport({ scale: scale });
           const canvas = document.createElement('canvas');
           canvas.width = viewport.width;
           canvas.height = viewport.height;
           const ctx = canvas.getContext('2d');
 
-          const renderContext = {
-            canvasContext: ctx,
-            viewport: viewport
-          };
-
-          page.render(renderContext);
+          page.render({ canvasContext: ctx, viewport: viewport });
           container.appendChild(canvas);
           pageCanvases[i] = canvas;
         });
-      }
-    }
-
-    function scrollToPage(pageNum) {
-      if (pageNum < 1 || pageNum > totalPages) return;
-      currentPage = pageNum;
-      updateNav();
-
-      const targetCanvas = pageCanvases[pageNum];
-      if (targetCanvas) {
-        targetCanvas.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
     }
 
@@ -143,6 +203,23 @@
       prevBtn.disabled = currentPage <= 1;
       nextBtn.disabled = currentPage >= totalPages;
       pageNumInput.value = currentPage;
+    }
+
+    function scrollToPage(pageNum) {
+      if (pageNum < 1 || pageNum > totalPages) return;
+      currentPage = pageNum;
+      updateNav();
+
+      const target = pageCanvases[pageNum];
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
+    function rerenderPages() {
+      if (!pdfDoc) return;
+      renderAllPages();
+      setTimeout(() => scrollToPage(currentPage), 500);
     }
 
     upload.addEventListener('change', (e) => {
@@ -157,30 +234,27 @@
           pdfDoc = pdf;
           totalPages = pdf.numPages;
           currentPage = 1;
-
-          nav.style.display = 'flex';
           updateNav();
-          renderAllPages(pdf);
+          renderAllPages();
         }).catch(err => {
-          alert("Error loading PDF: " + err.message);
+          alert("Failed to load PDF: " + err.message);
         });
       };
       reader.readAsArrayBuffer(file);
     });
 
-    prevBtn.addEventListener('click', () => {
-      scrollToPage(currentPage - 1);
+    prevBtn.addEventListener('click', () => scrollToPage(currentPage - 1));
+    nextBtn.addEventListener('click', () => scrollToPage(currentPage + 1));
+    jumpBtn.addEventListener('click', () => scrollToPage(parseInt(pageNumInput.value)));
+
+    zoomInBtn.addEventListener('click', () => {
+      scale = Math.min(scale + 0.2, 3);
+      rerenderPages();
     });
 
-    nextBtn.addEventListener('click', () => {
-      scrollToPage(currentPage + 1);
-    });
-
-    jumpBtn.addEventListener('click', () => {
-      const inputPage = parseInt(pageNumInput.value);
-      if (!isNaN(inputPage)) {
-        scrollToPage(inputPage);
-      }
+    zoomOutBtn.addEventListener('click', () => {
+      scale = Math.max(scale - 0.2, 0.4);
+      rerenderPages();
     });
   </script>
 </body>
