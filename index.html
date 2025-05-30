@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Advanced PDF Viewer</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      padding: 20px;
+    }
+
+    h2 {
+      margin-bottom: 10px;
+    }
+
+    input[type="file"] {
+      margin-bottom: 15px;
+    }
+
+    #navigation {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+
+    button, input[type="number"] {
+      padding: 8px 12px;
+      font-size: 14px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+    }
+
+    button {
+      background: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+
+    #pdf-container {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    canvas {
+      border: 1px solid #ccc;
+      background: white;
+      margin: 0 auto;
+    }
+
+    #page-jump {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+  </style>
+</head>
+<body>
+  <h2>Advanced PDF Viewer</h2>
+
+  <input type="file" id="upload" accept="application/pdf" />
+
+  <div id="navigation" style="display: none;">
+    <button id="prev">Previous</button>
+    <button id="next">Next</button>
+    <span id="page-info">Page 0 / 0</span>
+
+    <div id="page-jump">
+      <label for="page-num">Go to page:</label>
+      <input type="number" id="page-num" min="1" />
+      <button id="jump">Jump</button>
+    </div>
+  </div>
+
+  <div id="pdf-container"></div>
+
+  <!-- PDF.js -->
+  <script src="https://unpkg.com/pdfjs-dist@^3.2.146/build/pdf.min.js"></script>
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://unpkg.com/pdfjs-dist@^3.2.146/build/pdf.worker.min.js";
+
+    const upload = document.getElementById('upload');
+    const container = document.getElementById('pdf-container');
+    const nav = document.getElementById('navigation');
+    const pageInfo = document.getElementById('page-info');
+    const prevBtn = document.getElementById('prev');
+    const nextBtn = document.getElementById('next');
+    const pageNumInput = document.getElementById('page-num');
+    const jumpBtn = document.getElementById('jump');
+
+    let pdfDoc = null;
+    let totalPages = 0;
+    let currentPage = 1;
+    let pageCanvases = [];
+
+    function renderAllPages(pdf) {
+      container.innerHTML = ''; // Clear previous
+      pageCanvases = [];
+
+      for (let i = 1; i <= pdf.numPages; i++) {
+        pdf.getPage(i).then((page) => {
+          const viewport = page.getViewport({ scale: 1.2 });
+          const canvas = document.createElement('canvas');
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          const ctx = canvas.getContext('2d');
+
+          const renderContext = {
+            canvasContext: ctx,
+            viewport: viewport
+          };
+
+          page.render(renderContext);
+          container.appendChild(canvas);
+          pageCanvases[i] = canvas;
+        });
+      }
+    }
+
+    function scrollToPage(pageNum) {
+      if (pageNum < 1 || pageNum > totalPages) return;
+      currentPage = pageNum;
+      updateNav();
+
+      const targetCanvas = pageCanvases[pageNum];
+      if (targetCanvas) {
+        targetCanvas.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
+    function updateNav() {
+      pageInfo.textContent = `Page ${currentPage} / ${totalPages}`;
+      prevBtn.disabled = currentPage <= 1;
+      nextBtn.disabled = currentPage >= totalPages;
+      pageNumInput.value = currentPage;
+    }
+
+    upload.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file || file.type !== 'application/pdf') return;
+
+      const reader = new FileReader();
+      reader.onload = function () {
+        const typedarray = new Uint8Array(this.result);
+
+        pdfjsLib.getDocument(typedarray).promise.then(pdf => {
+          pdfDoc = pdf;
+          totalPages = pdf.numPages;
+          currentPage = 1;
+
+          nav.style.display = 'flex';
+          updateNav();
+          renderAllPages(pdf);
+        }).catch(err => {
+          alert("Error loading PDF: " + err.message);
+        });
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    prevBtn.addEventListener('click', () => {
+      scrollToPage(currentPage - 1);
+    });
+
+    nextBtn.addEventListener('click', () => {
+      scrollToPage(currentPage + 1);
+    });
+
+    jumpBtn.addEventListener('click', () => {
+      const inputPage = parseInt(pageNumInput.value);
+      if (!isNaN(inputPage)) {
+        scrollToPage(inputPage);
+      }
+    });
+  </script>
+</body>
+</html>
